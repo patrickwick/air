@@ -1,0 +1,7 @@
+/.zig-cache
+/zig-out
+/build
+/src/z3.zig
+/zero_division.o
+/zero_division
+
