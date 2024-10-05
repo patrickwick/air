@@ -63,6 +63,25 @@ pub fn reference(tokenizer: anytype) !Reference {
     return Reference{ .id = id, .is_unreferenced = is_unreferenced };
 }
 
+pub fn functionName(tokenizer: anytype) ?[]const u8 {
+    // skip "Begin Function AIR:" -> id, id, id, colon
+    const begin_token = tokenizer.nextToken();
+    if (begin_token != Token.identifier or !std.mem.eql(u8, begin_token.identifier, "Begin")) return null;
+    const function_token = tokenizer.nextToken();
+    if (function_token != Token.identifier or !std.mem.eql(u8, function_token.identifier, "Function")) return null;
+    const air_token = tokenizer.nextToken();
+    if (air_token != Token.identifier or !std.mem.eql(u8, air_token.identifier, "AIR")) return null;
+    if (tokenizer.nextToken() != Token.colon) return null;
+
+    // TODO: uses only the last part of the symbol -> concatenate
+    var name: ?[]const u8 = null;
+    var token = tokenizer.nextToken();
+    while (token != Token.colon and token != Token.endOfFile) : (token = tokenizer.nextToken()) {
+        if (token == Token.identifier) name = token.identifier;
+    }
+    return name;
+}
+
 // %38 = sub_with_overflow(struct{usize, u1}, %35!, %36!)
 fn skipType(tokenizer: anytype) !void {
     if (tokenizer.lookaheadToken() == Token.struct_type) {
@@ -105,16 +124,11 @@ pub fn expression(context: anytype, ref: Reference, instruction_token: Token) !v
         // %0 = arg(usize, "a")
         .arg => {
             const type_name = try argument(tokenizer);
+            _ = type_name; // ignored for now
             if (tokenizer.nextToken() != Token.comma) return error.unexpectedToken;
             const argument_name = try argument(tokenizer);
 
-            // TODO: supports integers only
-            _ = type_name; // ignored for now
-            try context.writer.print(
-                \\{s} = z3.Int('{s}')
-                \\
-            , .{ argument_name.literal, argument_name.literal });
-
+            try context.addSymbol(ref.id);
             try context.addConstraint(Argument{ .reference = ref }, argument_name, .equal, false);
         },
         // %15 = sub_safe(%13!, <usize, 100>)
@@ -202,16 +216,12 @@ pub fn expression(context: anytype, ref: Reference, instruction_token: Token) !v
             if (store_source != Token.identifier) return error.unexpectedToken;
             if (tokenizer.nextToken() != Token.quote) return error.unexpectedToken;
 
-            // TODO: supports integers only
-            try context.writer.print(
-                \\{s} = z3.Int('{s}')
-                \\
-            , .{ store_source.identifier, store_source.identifier });
+            try context.addSymbolString(store_source.identifier);
 
             // NOTE: constraint, not equivalence, otherwise this will be simplified out
             try context.writer.print("# name alias x{d}={s}\n", .{ store_target.id, store_source.identifier });
             // FIXME: adding constraint for alias does not work as expected
-            // try addConstraint(context, Argument{ .reference = store_target }, Argument{ .literal = store_source.identifier }, .equal, false);
+            // try context.addConstraint(Argument{ .reference = store_target }, Argument{ .literal = store_source.identifier }, .equal, false);
         },
         // TODO: add cond_br, cmp_neq, etc. for if and switch statements
         else => {

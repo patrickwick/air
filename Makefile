@@ -11,6 +11,8 @@ Z3_BINDINGS=${SOURCE_DIR}/z3.zig
 AIR=${BUILD_DIR}/air
 Z3_PY=${BUILD_DIR}/out.py
 
+TEST_SOURCE=./zero_division.zig
+
 all: test
 
 ${BUILD_DIR}:
@@ -19,13 +21,10 @@ ${BUILD_DIR}:
 ${Z3_BINDINGS}: ${BUILD_DIR} ${Z3_HEADER}
 	zig translate-c -lc /usr/include/z3.h > ${Z3_BINDINGS}
 
-${AIR}: ${BUILD_DIR}
-	${ZIG_DEBUG} build-exe --verbose-air ./zero_division.zig 2> ${AIR}
+${AIR}: ${BUILD_DIR} ${TEST_SOURCE}
+	${ZIG_DEBUG} build-exe --verbose-air ${TEST_SOURCE} 2> ${AIR}
 
-test: ${BUILD_DIR} ${AIR}
-	${MAKE} check
-
-check: ${BUILD_DIR} ${Z3_BINDINGS}
+test: ${BUILD_DIR} ${Z3_BINDINGS} ${AIR}
 	zig build && \
 	./zig-out/bin/zig-analyze 1> ${Z3_PY} && \
 	echo "" && \

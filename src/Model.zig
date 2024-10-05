@@ -4,16 +4,24 @@ const z3 = @import("z3.zig");
 
 const Model = @This();
 
+allocator: std.mem.Allocator,
 z3_config: z3.Z3_config,
 z3_context: z3.Z3_context,
 z3_solver: z3.Z3_solver,
 z3_int_sort: z3.Z3_sort,
 symbol_map: SymbolMap,
+symbol_string_map: SymbolStringMap,
 constraints: ConstraintArray,
 
 // TODO: data structure can be optimized (GPA auto map is very basic)
 pub const SymbolMap = std.AutoHashMap(air.RefereceId, z3.Z3_ast);
+pub const SymbolStringMap = std.StringHashMap(StringSymbol);
 pub const ConstraintArray = std.ArrayList(Constraint);
+
+const StringSymbol = struct {
+    identifier: [:0]const u8,
+    z3_symbol: z3.Z3_ast,
+};
 
 pub const Operator = enum {
     plus,
@@ -46,28 +54,44 @@ pub fn init(allocator: std.mem.Allocator) @This() {
     const z3_int_sort = z3.Z3_mk_int_sort(z3_context);
 
     return .{
+        .allocator = allocator,
         .z3_config = z3_config,
         .z3_context = z3_context,
         .z3_solver = z3_solver,
         .z3_int_sort = z3_int_sort,
         .symbol_map = SymbolMap.init(allocator),
+        .symbol_string_map = SymbolStringMap.init(allocator),
         .constraints = ConstraintArray.init(allocator),
     };
 }
 
 pub fn deinit(self: *@This()) void {
+    // deinit in reverse order
     defer z3.Z3_del_config(self.z3_config);
     defer z3.Z3_del_context(self.z3_context);
     defer z3.Z3_solver_dec_ref(self.z3_context, self.z3_solver);
-
-    self.symbol_map.deinit();
-    self.constraints.deinit();
+    defer self.symbol_map.deinit();
+    defer {
+        var it = self.symbol_string_map.iterator();
+        while (it.next()) |symbol| {
+            self.allocator.free(symbol.value_ptr.identifier);
+        }
+        self.symbol_string_map.deinit();
+    }
+    defer self.constraints.deinit();
 }
 
 pub fn addSymbol(self: *@This(), id: air.RefereceId) !void {
     const symbol = z3.Z3_mk_int_symbol(self.z3_context, @intCast(id)) orelse @panic("Z3_mk_int_symbol failed");
     const ast = z3.Z3_mk_const(self.z3_context, symbol, self.z3_int_sort) orelse @panic("Z3_mk_const failed");
     try self.symbol_map.put(id, ast);
+}
+
+pub fn addSymbolString(self: *@This(), identifier: []const u8) !void {
+    const identifier_c = try self.allocator.allocSentinel(u8, identifier.len, 0); // deallocated in deinit
+    const symbol = z3.Z3_mk_string_symbol(self.z3_context, identifier_c) orelse @panic("Z3_mk_string_symbol failed");
+    const ast = z3.Z3_mk_const(self.z3_context, symbol, self.z3_int_sort) orelse @panic("Z3_mk_const failed");
+    try self.symbol_string_map.put(identifier, .{ .identifier = identifier_c, .z3_symbol = ast });
 }
 
 pub fn addEquivalence(self: *@This(), left: air.Reference, right: air.Argument) !void {

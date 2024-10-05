@@ -5,37 +5,6 @@ const Token = Tokenizer.Token;
 const air = @import("air.zig");
 const Model = @import("Model.zig");
 
-fn functionName(tokenizer: anytype) ?[]const u8 {
-    // skip "Begin Function AIR:" -> id, id, id, colon
-    {
-        const begin_token = tokenizer.nextToken();
-        if (begin_token != Token.identifier or !std.mem.eql(u8, begin_token.identifier, "Begin")) return null;
-    }
-
-    {
-        const function_token = tokenizer.nextToken();
-        if (function_token != Token.identifier or !std.mem.eql(u8, function_token.identifier, "Function")) return null;
-    }
-
-    {
-        const air_token = tokenizer.nextToken();
-        if (air_token != Token.identifier or !std.mem.eql(u8, air_token.identifier, "AIR")) return null;
-    }
-
-    if (tokenizer.nextToken() != Token.colon) return null;
-
-    // TODO: uses only the last part of the symbol -> concatenate
-    var name: ?[]const u8 = null;
-    var token = tokenizer.nextToken();
-    while (token != Token.colon and token != Token.endOfFile) : (token = tokenizer.nextToken()) {
-        if (token == Token.identifier) name = token.identifier;
-    }
-    return name;
-}
-
-// TODO: put writer into context too or remove it
-// => anytype everywhere can be removed without a writer or use a function pointer instead
-// TODO: same for tokenizer
 fn Context(WriterType: type, TokenizerType: type) type {
     return struct {
         model: Model,
@@ -101,6 +70,16 @@ fn Context(WriterType: type, TokenizerType: type) type {
             , .{ id, id });
 
             try self.model.addSymbol(id);
+        }
+
+        pub fn addSymbolString(self: *@This(), identifier: []const u8) !void {
+            // TODO: supports integers only
+            try self.writer.print(
+                \\{s} = z3.Int('{s}')
+                \\
+            , .{ identifier, identifier });
+
+            try self.model.addSymbolString(identifier);
         }
 
         pub fn addEquivalence(self: *@This(), left: air.Reference, right: air.Argument) !void {
@@ -234,8 +213,8 @@ fn Context(WriterType: type, TokenizerType: type) type {
     };
 }
 
-fn extractFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype, function_name: []const u8) !void {
-    std.log.info("Extracting function: '{s}'", .{function_name});
+fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype, function_name: []const u8) !void {
+    std.log.info("Checking function: '{s}'", .{function_name});
 
     var context = Context(@TypeOf(writer.*), @TypeOf(tokenizer.*)).init(allocator, writer, tokenizer);
     defer context.deinit();
@@ -334,11 +313,11 @@ pub fn main() !void {
     while (token != Token.endOfFile) : (token = tokenizer.nextToken()) {
         switch (token) {
             .hash => {
-                const name_optional = functionName(&tokenizer);
+                const name_optional = air.functionName(&tokenizer);
                 if (name_optional) |name| {
                     if (std.mem.eql(u8, name, "main")) {
                         // if (std.mem.eql(u8, name, "divide")) {
-                        try extractFunction(allocator, &writer, &tokenizer, name);
+                        try checkFunction(allocator, &writer, &tokenizer, name);
                         break;
                     }
                 }
