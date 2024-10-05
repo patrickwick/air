@@ -5,13 +5,13 @@ const Token = Tokenizer.Token;
 const air = @import("air.zig");
 const Model = @import("Model.zig");
 
-fn Context(WriterType: type, TokenizerType: type) type {
+fn Context(TokenizerType: type) type {
     return struct {
         model: Model,
-        writer: *const WriterType,
+        writer: std.io.AnyWriter,
         tokenizer: *TokenizerType,
 
-        pub fn init(allocator: std.mem.Allocator, writer: *const WriterType, tokenizer: *TokenizerType) @This() {
+        pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter, tokenizer: *TokenizerType) @This() {
             return .{
                 .model = Model.init(allocator),
                 .writer = writer,
@@ -216,7 +216,7 @@ fn Context(WriterType: type, TokenizerType: type) type {
 fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype, function_name: []const u8) !void {
     std.log.info("Checking function: '{s}'", .{function_name});
 
-    var context = Context(@TypeOf(writer.*), @TypeOf(tokenizer.*)).init(allocator, writer, tokenizer);
+    var context = Context(@TypeOf(tokenizer.*)).init(allocator, writer.any(), tokenizer);
     defer context.deinit();
 
     // remove other header information
