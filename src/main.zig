@@ -213,13 +213,8 @@ fn Context(TokenizerType: type) type {
     };
 }
 
-// TODO: split building the model and checking for testing
-fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype, function_name: []const u8) !void {
-    std.log.info("Checking function: '{s}'", .{function_name});
-
-    var context = Context(@TypeOf(tokenizer.*)).init(allocator, writer.any(), tokenizer);
-    defer context.deinit();
-
+// TODO: mutating the model inside context is bad design => should return model detached from context
+fn createModel(context: anytype, tokenizer: anytype) !void {
     // remove other header information
     while (tokenizer.lookaheadToken() != Token.percent and tokenizer.lookaheadToken() != Token.endOfFile) : (_ = tokenizer.nextToken()) {}
 
@@ -242,7 +237,7 @@ fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anyty
                 std.log.debug("AIR instruction: {}", .{instruction_token});
 
                 if (tokenizer.nextToken() != Token.bracketOpen) return error.unexpectedToken;
-                try air.expression(&context, ref, instruction_token);
+                try air.expression(context, ref, instruction_token);
                 if (tokenizer.nextToken() != Token.bracketClose) return error.unexpectedToken;
             },
             else => _ = tokenizer.nextToken(),
@@ -250,7 +245,14 @@ fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anyty
     }
 
     try context.renderConstraints();
-    try context.model.checkResult();
+}
+
+fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype) !void {
+    var context = Context(@TypeOf(tokenizer.*)).init(allocator, writer.any(), tokenizer);
+    defer context.deinit();
+
+    try createModel(&context, context.tokenizer);
+    _ = try context.model.checkResult(); // TODO: print findings
 }
 
 pub fn main() !void {
@@ -318,7 +320,7 @@ pub fn main() !void {
                 if (name_optional) |name| {
                     if (std.mem.eql(u8, name, "main")) {
                         // if (std.mem.eql(u8, name, "divide")) {
-                        try checkFunction(allocator, &writer, &tokenizer, name);
+                        try checkFunction(allocator, &writer, &tokenizer);
                         break;
                     }
                 }
@@ -330,7 +332,9 @@ pub fn main() !void {
 
 const t = std.testing;
 
+// TODO: add test set folder with more cases
 test "Zero division" {
+    // TODO: simplify the division by zero test
     const air_content =
         \\# Begin Function AIR: zero_division.main:
         \\# Total AIR+Liveness bytes: 1.6015625KiB
@@ -357,7 +361,7 @@ test "Zero division" {
         \\      %10!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "integer overflow"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
         \\      %11!= unreach()
         \\    })
-        \\  } %9!)
+        \\  } %9!)u
         \\  %15 = struct_field_val(%7!, 0)
         \\  %16!= store_safe(%1, %15!)
         \\  %17!= dbg_stmt(5:5)
@@ -435,12 +439,8 @@ test "Zero division" {
         \\
     ;
 
-    const allocator = t.allocator;
-
     var tokenizer = Tokenizer.IncrementalTokenizer{ .source = air_content[0..] };
     defer tokenizer.deinit();
-
-    const writer = std.io.null_writer;
 
     var token = tokenizer.nextToken();
     while (token != Token.endOfFile) : (token = tokenizer.nextToken()) {
@@ -449,9 +449,6 @@ test "Zero division" {
                 const name_optional = air.functionName(&tokenizer);
                 if (name_optional) |name| {
                     if (std.mem.eql(u8, name, "main")) {
-                        // if (std.mem.eql(u8, name, "divide")) {
-                        // TODO: split building the model and checking for testing
-                        try checkFunction(allocator, &writer, &tokenizer, name);
                         break;
                     }
                 }
@@ -459,6 +456,18 @@ test "Zero division" {
             else => {},
         }
     }
+
+    const allocator = t.allocator;
+    const writer = std.io.null_writer;
+
+    var context = Context(@TypeOf(tokenizer)).init(allocator, writer.any(), &tokenizer);
+    defer context.deinit();
+
+    try createModel(&context, context.tokenizer);
+    const model: *Model = &context.model;
+    try t.expect(try model.checkResult());
+
+    // TODO: assert that model finds the correct c=50 that would lead to division by zero
 }
 
 test {

@@ -177,7 +177,7 @@ pub fn addConstraint(self: *@This(), left: air.Argument, right: air.Argument, co
     try self.constraints.append(Constraint{ .left = left, .right = right, .comparison = comparison, .is_or = is_or });
 }
 
-pub fn checkResult(self: *@This()) !void {
+pub fn checkResult(self: *@This()) !bool {
     const check_result = z3.Z3_solver_check(self.z3_context, self.z3_solver);
     switch (check_result) {
         z3.Z3_L_TRUE, // satisfiable
@@ -229,10 +229,13 @@ pub fn checkResult(self: *@This()) !void {
                     else => return error.unsupportedType,
                 }
             }
+
+            return true;
         },
         // not satisfiable
         z3.Z3_L_FALSE => {
             std.log.info("No issues found", .{});
+            return false;
         },
         else => @panic("invalid Z3_solver_check result"),
     }
