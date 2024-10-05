@@ -1,8 +1,85 @@
 const std = @import("std");
-pub const tokens = @import("tokens.zig");
 
-pub const Token = tokens.Token;
-pub const StringView = tokens.StringView;
+pub const StringView = []const u8;
+
+pub const endOfFileCharacter: u8 = 0;
+pub const newLineCharacter: u8 = '\n';
+
+pub const Token = union(enum) {
+    endOfFile: void,
+
+    semicolon: void,
+    comma: void,
+    colon: void,
+    percent: void,
+    dot: void,
+    bracketOpen: void,
+    bracketClose: void,
+    curlyOpen: void,
+    curlyClose: void,
+    squareOpen: void,
+    squareClose: void,
+
+    less: void,
+    greater: void,
+    caret: void,
+    exclamation: void,
+    equal: void,
+    plus: void,
+    minus: void,
+    star: void,
+    hash: void,
+    quote: void,
+
+    forwardSlash: void,
+
+    comment: StringView,
+    blockComment: StringView,
+
+    identifier: StringView,
+    stringLiteral: StringView,
+    numberLiteral: usize,
+
+    returnToken: void,
+    auto: void,
+    constToken: void,
+    varToken: void,
+    function: void,
+
+    // AIR instructions
+    alloc: void,
+    store_safe: void,
+    load: void,
+    arg: void,
+    struct_field_val: void,
+
+    // AIR operators
+    add_safe: void,
+    sub_safe: void,
+    mul_safe: void,
+    add_with_overflow: void,
+    sub_with_overflow: void,
+    mul_with_overflow: void,
+    div_trunc: void,
+
+    // AIR types
+    struct_type: void,
+
+    // AIR debug
+    dbg_var_val: void,
+    dbg_var_ptr: void,
+
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        return switch (self) {
+            .comment => writer.print("{s}: '//{s}'", .{ @tagName(self), self.comment }),
+            .blockComment => writer.print("{s}: /*{s}*/", .{ @tagName(self), self.blockComment }),
+            .identifier => writer.print("{s}: '{s}'", .{ @tagName(self), self.identifier }),
+            else => writer.print("{s}", .{@tagName(self)}),
+        };
+    }
+};
 
 pub const TokenizerSourceLocation = struct {
     line: u32,
@@ -21,7 +98,7 @@ pub const IncrementalTokenizer = struct {
         defer self.next();
         const token = switch (self.lookahead(0)) {
             // single character
-            tokens.endOfFileCharacter => Token.endOfFile,
+            endOfFileCharacter => Token.endOfFile,
             ';' => Token.semicolon,
             ',' => Token.comma,
             '%' => Token.percent,
@@ -106,7 +183,7 @@ pub const IncrementalTokenizer = struct {
 
         const split_index = @min(self.code.len - 1, self.offset + 1);
         for (self.code, 0..) |char, i| {
-            if (char == tokens.newLineCharacter) {
+            if (char == newLineCharacter) {
                 if (i < split_index) {
                     line += 1;
                     column = 0;
@@ -127,7 +204,7 @@ pub const IncrementalTokenizer = struct {
     }
 
     inline fn lookahead(self: @This(), comptime count: usize) u8 {
-        return if (self.code.len > self.offset + count) self.code[self.offset + count] else tokens.endOfFileCharacter;
+        return if (self.code.len > self.offset + count) self.code[self.offset + count] else endOfFileCharacter;
     }
 
     inline fn next(self: *@This()) void {
@@ -143,13 +220,13 @@ pub const IncrementalTokenizer = struct {
 
     inline fn isWhitespace(self: @This()) bool {
         return switch (self.lookahead(0)) {
-            ' ', '\t', tokens.newLineCharacter => true,
+            ' ', '\t', newLineCharacter => true,
             else => false,
         };
     }
 
     inline fn isLineComment(self: @This()) bool {
-        return self.lookahead(1) != tokens.newLineCharacter;
+        return self.lookahead(1) != newLineCharacter;
     }
 
     inline fn isBlockComment(self: @This()) bool {

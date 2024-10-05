@@ -12,8 +12,8 @@ pub const Reference = struct {
 
 pub const Argument = union(enum) {
     reference: Reference,
-    literal: Tokenizer.tokens.StringView,
-    type_identifier: Tokenizer.tokens.StringView,
+    literal: Tokenizer.StringView,
+    type_identifier: Tokenizer.StringView,
 };
 
 fn argument(tokenizer: anytype) !Argument {
