@@ -100,14 +100,12 @@ fn Context(WriterType: type, TokenizerType: type) type {
                 \\
             , .{ id, id });
 
-            // TODO: split python output from model
             try self.model.addSymbol(id);
         }
 
         pub fn addEquivalence(self: *@This(), left: air.Reference, right: air.Argument) !void {
             switch (right) {
                 .reference => |ref| {
-                    // TODO: supports integers only
                     try self.writer.print(
                         \\x{d} = x{d}
                         \\
@@ -115,13 +113,11 @@ fn Context(WriterType: type, TokenizerType: type) type {
                 },
                 .literal => |literal| {
                     if (std.mem.eql(u8, literal, "undefined")) {
-                        // TODO: add analysis that there is no read before the first write
                         try self.writer.print(
                             \\# x{d} is undefined
                             \\
                         , .{left.id});
                     } else {
-                        // TODO: supports integers only
                         try self.writer.print(
                             \\x{d} = {s}
                             \\
@@ -177,12 +173,51 @@ fn Context(WriterType: type, TokenizerType: type) type {
         }
 
         pub fn renderConstraints(self: *@This()) !void {
+            const Py = struct {
+                fn renderConstraint(context: anytype, constraint: *const Model.Constraint) !void {
+                    // FIXME: support left hand side literal
+                    if (constraint.left != .reference) return error.unexpectedType;
+
+                    const left = constraint.left.reference;
+                    const right = constraint.right;
+
+                    const comp = switch (constraint.comparison) {
+                        .equal => "==",
+                        .not_equal => "!=",
+                        .greater => ">",
+                        .greater_equal => ">=",
+                        .less => "<",
+                        .less_equal => "<=",
+                    };
+
+                    // FIXME: support other comparisons
+                    if (constraint.comparison != .equal) std.log.warn("Z3 comparison not integrated yet", .{});
+
+                    switch (right) {
+                        .reference => |ref| {
+                            try context.writer.print(
+                                \\x{d} {s} x{d}
+                            , .{ left.id, comp, ref.id });
+                        },
+                        .literal => |literal| {
+                            if (std.mem.eql(u8, literal, "undefined")) return context.addError(@src(), error.unexpectedType);
+
+                            try context.writer.print(
+                                \\x{d} {s} {s}
+                            , .{ left.id, comp, literal });
+                        },
+                        .type_identifier => return context.addError(@src(), error.unexpectedType),
+                    }
+                }
+            };
+
+            // TODO: leaky abstraction: Or before And because of py, not required for z3
             try self.writer.writeAll("# constraints\n");
             try self.writer.writeAll("s.add(z3.Or(");
             for (self.model.constraints.items) |constraint| {
                 if (!constraint.is_or) continue;
-                // TODO: don't pass writer => remove py from model
-                try self.model.renderConstraint(self.writer, &constraint);
+                try Py.renderConstraint(self, &constraint);
+                try self.model.renderConstraint(&constraint);
                 try self.writer.writeAll(", "); // python allows trailing comma
             }
             try self.writer.writeAll("))\n");
@@ -190,7 +225,8 @@ fn Context(WriterType: type, TokenizerType: type) type {
             try self.writer.writeAll("s.add(z3.And(");
             for (self.model.constraints.items) |constraint| {
                 if (constraint.is_or) continue;
-                try self.model.renderConstraint(self.writer, &constraint);
+                try Py.renderConstraint(self, &constraint);
+                try self.model.renderConstraint(&constraint);
                 try self.writer.writeAll(", "); // python allows trailing comma
             }
             try self.writer.writeAll("))\n");

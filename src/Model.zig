@@ -214,8 +214,7 @@ pub fn checkResult(self: *@This()) !void {
     }
 }
 
-// TODO: don't pass writer => remove py from model and reenable addError
-pub fn renderConstraint(self: *@This(), writer: anytype, constraint: *const Model.Constraint) !void {
+pub fn renderConstraint(self: *@This(), constraint: *const Model.Constraint) !void {
     // FIXME: support left hand side literal
     if (constraint.left != .reference) return error.unexpectedType;
 
@@ -223,25 +222,11 @@ pub fn renderConstraint(self: *@This(), writer: anytype, constraint: *const Mode
     const right = constraint.right;
     const left_ast = self.symbol_map.get(left.id) orelse @panic("symbol not found");
 
-    const comp = switch (constraint.comparison) {
-        .equal => "==",
-        .not_equal => "!=",
-        .greater => ">",
-        .greater_equal => ">=",
-        .less => "<",
-        .less_equal => "<=",
-    };
-
     // FIXME: support other comparisons
     if (constraint.comparison != .equal) std.log.warn("Z3 comparison not integrated yet", .{});
 
     switch (right) {
-        .reference => |ref| {
-            // TODO: supports integers only
-            try writer.print(
-                \\x{d} {s} x{d}
-            , .{ left.id, comp, ref.id });
-
+        .reference => {
             const right_ast = self.symbol_map.get(left.id) orelse @panic("symbol not found");
             const eq = z3.Z3_mk_eq(self.z3_context, left_ast, right_ast) orelse @panic("z3.Z3_mk_eq failed");
             z3.Z3_solver_assert(self.z3_context, self.z3_solver, eq);
@@ -249,11 +234,6 @@ pub fn renderConstraint(self: *@This(), writer: anytype, constraint: *const Mode
         .literal => |literal| {
             // if (std.mem.eql(u8, literal, "undefined")) return self.addError(@src(), error.unexpectedType);
             if (std.mem.eql(u8, literal, "undefined")) return error.unexpectedType;
-
-            // TODO: supports integers only
-            try writer.print(
-                \\x{d} {s} {s}
-            , .{ left.id, comp, literal });
 
             // FIXME: literal is not necessarily an integer
             // These are only added for debugging reason, so it's easier to know the original variable
