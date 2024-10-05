@@ -213,6 +213,7 @@ fn Context(TokenizerType: type) type {
     };
 }
 
+// TODO: split building the model and checking for testing
 fn checkFunction(allocator: std.mem.Allocator, writer: anytype, tokenizer: anytype, function_name: []const u8) !void {
     std.log.info("Checking function: '{s}'", .{function_name});
 
@@ -306,7 +307,7 @@ pub fn main() !void {
     };
     defer allocator.free(air_content);
 
-    var tokenizer = Tokenizer.IncrementalTokenizer{ .code = air_content };
+    var tokenizer = Tokenizer.IncrementalTokenizer{ .source = air_content };
     defer tokenizer.deinit();
 
     var token = tokenizer.nextToken();
@@ -327,7 +328,139 @@ pub fn main() !void {
     }
 }
 
-// TODO: inline relevant AIR to test parsing
+const t = std.testing;
+
+test "Zero division" {
+    const air_content =
+        \\# Begin Function AIR: zero_division.main:
+        \\# Total AIR+Liveness bytes: 1.6015625KiB
+        \\# AIR Instructions:         72 (648B)
+        \\# AIR Extra Data:           145 (580B)
+        \\# Liveness tomb_bits:       40B
+        \\# Liveness Extra Data:      37 (148B)
+        \\# Liveness special table:   15 (120B)
+        \\  %0!= dbg_stmt(2:5)
+        \\  %1 = alloc(*usize)
+        \\  %2!= store_safe(%1, <usize, undefined>)
+        \\  %3!= dbg_var_ptr(%1, "c")
+        \\  %4!= dbg_stmt(3:5)
+        \\  %5 = load(usize, %1)
+        \\  %6!= dbg_stmt(3:7)
+        \\  %7 = mul_with_overflow(struct{usize, u1}, %5!, <usize, 2>)
+        \\  %8 = struct_field_val(%7, 1)
+        \\  %9 = cmp_eq(%8!, <u1, 0>)
+        \\  %12!= block(void, {
+        \\    %13!= cond_br(%9!, likely {
+        \\      %14!= br(%12, @Air.Inst.Ref.void_value)
+        \\    }, cold {
+        \\      %1! %7!
+        \\      %10!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "integer overflow"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
+        \\      %11!= unreach()
+        \\    })
+        \\  } %9!)
+        \\  %15 = struct_field_val(%7!, 0)
+        \\  %16!= store_safe(%1, %15!)
+        \\  %17!= dbg_stmt(5:5)
+        \\  %18 = alloc(*usize)
+        \\  %19!= store_safe(%18, <usize, 20>)
+        \\  %20!= dbg_var_ptr(%18, "e")
+        \\  %21!= dbg_stmt(6:5)
+        \\  %22 = load(usize, %18)
+        \\  %23!= dbg_stmt(6:7)
+        \\  %24 = mul_with_overflow(struct{usize, u1}, %22!, <usize, 5>)
+        \\  %25 = struct_field_val(%24, 1)
+        \\  %26 = cmp_eq(%25!, <u1, 0>)
+        \\  %29!= block(void, {
+        \\    %30!= cond_br(%26!, likely {
+        \\      %31!= br(%29, @Air.Inst.Ref.void_value)
+        \\    }, cold {
+        \\      %1! %24! %18!
+        \\      %27!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "integer overflow"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
+        \\      %28!= unreach()
+        \\    })
+        \\  } %26!)
+        \\  %32 = struct_field_val(%24!, 0)
+        \\  %33!= store_safe(%18, %32!)
+        \\  %34!= dbg_stmt(8:5)
+        \\  %35 = load(usize, %1)
+        \\  %36 = load(usize, %18)
+        \\  %37!= dbg_stmt(8:27)
+        \\  %38 = sub_with_overflow(struct{usize, u1}, %35!, %36!)
+        \\  %39 = struct_field_val(%38, 1)
+        \\  %40 = cmp_eq(%39!, <u1, 0>)
+        \\  %43!= block(void, {
+        \\    %44!= cond_br(%40!, likely {
+        \\      %45!= br(%43, @Air.Inst.Ref.void_value)
+        \\    }, cold {
+        \\      %1! %38! %18!
+        \\      %41!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "integer overflow"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
+        \\      %42!= unreach()
+        \\    })
+        \\  } %40!)
+        \\  %46 = struct_field_val(%38!, 0)
+        \\  %47!= dbg_stmt(8:22)
+        \\  %48 = cmp_neq(%46, @Air.Inst.Ref.zero_usize)
+        \\  %51!= block(void, {
+        \\    %52!= cond_br(%48!, likely {
+        \\      %53!= br(%51, @Air.Inst.Ref.void_value)
+        \\    }, cold {
+        \\      %1! %46! %18!
+        \\      %49!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "division by zero"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
+        \\      %50!= unreach()
+        \\    })
+        \\  } %48!)
+        \\  %54 = div_trunc(<usize, 2>, %46!)
+        \\  %55!= dbg_var_val(%54!, "result")
+        \\  %56!= dbg_stmt(10:15)
+        \\  %57 = load(usize, %1!)
+        \\  %58 = load(usize, %18!)
+        \\  %59!= dbg_stmt(10:21)
+        \\  %60 = sub_with_overflow(struct{usize, u1}, %57!, %58!)
+        \\  %61 = struct_field_val(%60, 1)
+        \\  %62 = cmp_eq(%61!, <u1, 0>)
+        \\  %65!= block(void, {
+        \\    %66!= cond_br(%62!, likely {
+        \\      %67!= br(%65, @Air.Inst.Ref.void_value)
+        \\    }, cold {
+        \\      %60!
+        \\      %63!= call(<fn ([]const u8, ?*const builtin.StackTrace, ?usize) noreturn, (function 'defaultPanic')>, [<[]const u8, "integer overflow"[0..16]>, <?*const builtin.StackTrace, null>, <?usize, null>])
+        \\      %64!= unreach()
+        \\    })
+        \\  } %62!)
+        \\  %68 = struct_field_val(%60!, 0)
+        \\  %69!= dbg_stmt(10:15)
+        \\  %70!= call(<fn (usize, usize) usize, (function 'divide')>, [<usize, 2>, %68!])
+        \\  %71!= ret_safe(<@typeInfo(@typeInfo(@TypeOf(zero_division.main)).@"fn".return_type.?).error_union.error_set!void, {}>)
+        \\# End Function AIR: zero_division.main
+        \\
+    ;
+
+    const allocator = t.allocator;
+
+    var tokenizer = Tokenizer.IncrementalTokenizer{ .source = air_content[0..] };
+    defer tokenizer.deinit();
+
+    const writer = std.io.null_writer;
+
+    var token = tokenizer.nextToken();
+    while (token != Token.endOfFile) : (token = tokenizer.nextToken()) {
+        switch (token) {
+            .hash => {
+                const name_optional = air.functionName(&tokenizer);
+                if (name_optional) |name| {
+                    if (std.mem.eql(u8, name, "main")) {
+                        // if (std.mem.eql(u8, name, "divide")) {
+                        // TODO: split building the model and checking for testing
+                        try checkFunction(allocator, &writer, &tokenizer, name);
+                        break;
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

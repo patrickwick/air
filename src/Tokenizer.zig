@@ -89,7 +89,7 @@ pub const TokenizerSourceLocation = struct {
 
 pub const IncrementalTokenizer = struct {
     offset: usize = 0,
-    code: StringView,
+    source: StringView,
 
     pub fn deinit(_: *@This()) void {}
 
@@ -179,10 +179,10 @@ pub const IncrementalTokenizer = struct {
         var line: u32 = 1;
         var column: u32 = 0;
         var start: usize = 0;
-        var end: usize = self.code.len - 1;
+        var end: usize = self.source.len - 1;
 
-        const split_index = @min(self.code.len - 1, self.offset + 1);
-        for (self.code, 0..) |char, i| {
+        const split_index = @min(self.source.len - 1, self.offset + 1);
+        for (self.source, 0..) |char, i| {
             if (char == newLineCharacter) {
                 if (i < split_index) {
                     line += 1;
@@ -199,12 +199,12 @@ pub const IncrementalTokenizer = struct {
         return TokenizerSourceLocation{
             .line = line,
             .column = column,
-            .code_line = self.code[start..end],
+            .code_line = self.source[start..end],
         };
     }
 
     inline fn lookahead(self: @This(), comptime count: usize) u8 {
-        return if (self.code.len > self.offset + count) self.code[self.offset + count] else endOfFileCharacter;
+        return if (self.source.len > self.offset + count) self.source[self.offset + count] else endOfFileCharacter;
     }
 
     inline fn next(self: *@This()) void {
@@ -215,7 +215,7 @@ pub const IncrementalTokenizer = struct {
     inline fn extract(self: *@This(), comptime condition: ConditionFunction) StringView {
         const start = self.offset;
         while (condition(self.*)) : (self.next()) {}
-        return self.code[start..@min(self.offset + 1, self.code.len)];
+        return self.source[start..@min(self.offset + 1, self.source.len)];
     }
 
     inline fn isWhitespace(self: @This()) bool {
@@ -244,11 +244,10 @@ pub const IncrementalTokenizer = struct {
 const t = std.testing;
 
 test "Whitespaces" {
-    const code = " \t  \n\n  \t \ta\t\n; \t\n";
-    var tokenizer = IncrementalTokenizer{ .code = code };
+    const code = " \t  \n\n const  \t\t\n; \t\n";
+    var tokenizer = IncrementalTokenizer{ .source = code };
     defer tokenizer.deinit();
 
     try t.expectEqual(.constToken, tokenizer.nextToken());
-    try t.expectEqual(.identifier, tokenizer.nextToken());
     try t.expectEqual(.semicolon, tokenizer.nextToken());
 }

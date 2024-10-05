@@ -19,7 +19,7 @@ pub const SymbolStringMap = std.StringHashMap(StringSymbol);
 pub const ConstraintArray = std.ArrayList(Constraint);
 
 const StringSymbol = struct {
-    identifier: [:0]const u8,
+    identifier: [:0]const u8, // heap allocated due to C zero sentinel
     z3_symbol: z3.Z3_ast,
 };
 

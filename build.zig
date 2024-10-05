@@ -31,7 +31,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .cwd_relative = "src/main.zig" },
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
+        .use_lld = false,
+        .use_llvm = false,
     });
+    exe_unit_tests.linkSystemLibrary("z3");
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);

@@ -63,6 +63,16 @@ pub fn reference(tokenizer: anytype) !Reference {
     return Reference{ .id = id, .is_unreferenced = is_unreferenced };
 }
 
+// %38 = sub_with_overflow(struct{usize, u1}, %35!, %36!)
+fn skipType(tokenizer: anytype) !void {
+    if (tokenizer.lookaheadToken() == Token.struct_type) {
+        _ = tokenizer.nextToken();
+        while (tokenizer.nextToken() != Token.curlyClose) {}
+    }
+
+    while (tokenizer.lookaheadToken() != Token.comma) _ = tokenizer.nextToken();
+}
+
 pub fn functionName(tokenizer: anytype) ?[]const u8 {
     // skip "Begin Function AIR:" -> id, id, id, colon
     const begin_token = tokenizer.nextToken();
@@ -80,16 +90,6 @@ pub fn functionName(tokenizer: anytype) ?[]const u8 {
         if (token == Token.identifier) name = token.identifier;
     }
     return name;
-}
-
-// %38 = sub_with_overflow(struct{usize, u1}, %35!, %36!)
-fn skipType(tokenizer: anytype) !void {
-    if (tokenizer.lookaheadToken() == Token.struct_type) {
-        _ = tokenizer.nextToken();
-        while (tokenizer.nextToken() != Token.curlyClose) {}
-    }
-
-    while (tokenizer.lookaheadToken() != Token.comma) _ = tokenizer.nextToken();
 }
 
 pub fn expression(context: anytype, ref: Reference, instruction_token: Token) !void {
