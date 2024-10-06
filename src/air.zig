@@ -12,8 +12,8 @@ pub const Reference = struct {
 
 pub const Argument = union(enum) {
     reference: Reference,
-    literal: Tokenizer.StringView,
-    type_identifier: Tokenizer.StringView,
+    literal: []const u8,
+    type_identifier: []const u8,
 };
 
 fn argument(tokenizer: anytype) !Argument {
@@ -238,5 +238,80 @@ pub fn expression(context: anytype, ref: Reference, instruction_token: Token) !v
                 if (lookahead != Token.bracketClose or bracket_count > 0) _ = tokenizer.nextToken();
             }
         },
+    }
+}
+
+const t = std.testing;
+
+test "Reference" {
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "%35!" };
+        defer tokenizer.deinit();
+        try t.expectEqual(Reference{ .id = 35, .is_unreferenced = true }, try reference(&tokenizer));
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "%1" };
+        defer tokenizer.deinit();
+        try t.expectEqual(Reference{ .id = 1, .is_unreferenced = false }, try reference(&tokenizer));
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "abc" };
+        defer tokenizer.deinit();
+        try t.expectError(error.unexpectedToken, reference(&tokenizer));
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "%abc" };
+        defer tokenizer.deinit();
+        try t.expectError(std.fmt.ParseIntError.InvalidCharacter, reference(&tokenizer));
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "%999999999999999999999999" };
+        defer tokenizer.deinit();
+        try t.expectError(std.fmt.ParseIntError.Overflow, reference(&tokenizer));
+    }
+}
+
+test "Function name" {
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "Begin Function AIR: zero_division.main:" };
+        defer tokenizer.deinit();
+        const result = functionName(&tokenizer);
+        try t.expect(result != null);
+        try t.expectEqualStrings("main", result.?);
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "Begin Function AIR: zero_division.main" }; // no colon
+        defer tokenizer.deinit();
+        const result = functionName(&tokenizer);
+        try t.expect(result != null);
+        try t.expectEqualStrings("main", result.?);
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "Begin Function AIR: zero_division.main :#//" }; // trailing characters
+        defer tokenizer.deinit();
+        const result = functionName(&tokenizer);
+        try t.expect(result != null);
+        try t.expectEqualStrings("main", result.?);
+    }
+
+    {
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "# Begin Function AIR: zero_division.main:" }; // extra hash
+        defer tokenizer.deinit();
+        try t.expectEqual(null, functionName(&tokenizer));
+    }
+}
+
+test "Argument" {
+    {
+        // FIXME: causes infinite loop
+        var tokenizer = Tokenizer.IncrementalTokenizer{ .source = "a" };
+        defer tokenizer.deinit();
+        // _ = try argument(&tokenizer);
     }
 }

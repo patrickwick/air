@@ -1,7 +1,5 @@
 const std = @import("std");
 
-pub const StringView = []const u8;
-
 pub const endOfFileCharacter: u8 = 0;
 pub const newLineCharacter: u8 = '\n';
 
@@ -33,11 +31,11 @@ pub const Token = union(enum) {
 
     forwardSlash: void,
 
-    comment: StringView,
-    blockComment: StringView,
+    comment: []const u8,
+    blockComment: []const u8,
 
-    identifier: StringView,
-    stringLiteral: StringView,
+    identifier: []const u8,
+    stringLiteral: []const u8,
     numberLiteral: usize,
 
     returnToken: void,
@@ -89,11 +87,12 @@ pub const TokenizerSourceLocation = struct {
 
 pub const IncrementalTokenizer = struct {
     offset: usize = 0,
-    source: StringView,
+    source: []const u8,
 
     pub fn deinit(_: *@This()) void {}
 
     pub fn nextToken(self: *@This()) Token {
+        if (self.lookahead(0) == endOfFileCharacter) return .endOfFile;
         _ = self.extract(isWhitespace);
         defer self.next();
         const token = switch (self.lookahead(0)) {
@@ -120,17 +119,18 @@ pub const IncrementalTokenizer = struct {
             '*' => Token.star,
             '#' => Token.hash,
             '"' => Token.quote,
+
             // two characters
             '/' => switch (self.lookahead(1)) {
                 '/' => Token{ .comment = self.extract(isLineComment)[2..] },
                 '*' => Token{ .blockComment = self.extract(isBlockComment)[2..] },
                 else => Token.forwardSlash,
             },
+
             // multi character
             else => token: {
                 const tokenSlice = self.extract(isToken);
 
-                // ordered by frequency
                 if (std.mem.eql(u8, tokenSlice, "fn")) break :token Token.varToken;
                 if (std.mem.eql(u8, tokenSlice, "const")) break :token Token.constToken;
                 if (std.mem.eql(u8, tokenSlice, "var")) break :token Token.varToken;
@@ -143,6 +143,7 @@ pub const IncrementalTokenizer = struct {
                 if (std.mem.eql(u8, tokenSlice, "load")) break :token Token.load;
                 if (std.mem.eql(u8, tokenSlice, "arg")) break :token Token.arg;
                 if (std.mem.eql(u8, tokenSlice, "struct_field_val")) break :token Token.struct_field_val;
+
                 // AIR operators
                 if (std.mem.eql(u8, tokenSlice, "add_safe")) break :token Token.add_safe;
                 if (std.mem.eql(u8, tokenSlice, "sub_safe")) break :token Token.sub_safe;
@@ -179,6 +180,7 @@ pub const IncrementalTokenizer = struct {
         var line: u32 = 1;
         var column: u32 = 0;
         var start: usize = 0;
+        std.debug.assert(self.source.len > 0);
         var end: usize = self.source.len - 1;
 
         const split_index = @min(self.source.len - 1, self.offset + 1);
@@ -196,6 +198,8 @@ pub const IncrementalTokenizer = struct {
             if (i < split_index) column += 1;
         }
 
+        std.debug.assert(start < self.source.len);
+        std.debug.assert(end <= self.source.len);
         return TokenizerSourceLocation{
             .line = line,
             .column = column,
@@ -204,7 +208,10 @@ pub const IncrementalTokenizer = struct {
     }
 
     inline fn lookahead(self: @This(), comptime count: usize) u8 {
-        return if (self.source.len > self.offset + count) self.source[self.offset + count] else endOfFileCharacter;
+        return if (self.source.len > self.offset + count) self.source[self.offset + count] else {
+            @setCold(true);
+            return endOfFileCharacter;
+        };
     }
 
     inline fn next(self: *@This()) void {
@@ -212,10 +219,13 @@ pub const IncrementalTokenizer = struct {
     }
 
     const ConditionFunction = fn (@This()) callconv(.Inline) bool;
-    inline fn extract(self: *@This(), comptime condition: ConditionFunction) StringView {
+    inline fn extract(self: *@This(), comptime condition: ConditionFunction) []const u8 {
         const start = self.offset;
-        while (condition(self.*)) : (self.next()) {}
-        return self.source[start..@min(self.offset + 1, self.source.len)];
+        while (condition(self.*) and self.offset < self.source.len) : (self.next()) {}
+        const end = @min(self.offset + 1, self.source.len);
+        std.debug.assert(start < self.source.len);
+        std.debug.assert(end <= self.source.len);
+        return self.source[start..end];
     }
 
     inline fn isWhitespace(self: @This()) bool {
