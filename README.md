@@ -44,4 +44,4 @@ Model:
 I know that parsing the textual representation from --verbose-air is not great but working on the binary format either requires compiling the compiler repeatedly or writing a binary dump for AIR.
 I started writing a binary dump for AIR but parsing the textual representation is good enough for a crude PoC.
 
-**Update:** check out [CLR](https://github.com/ityonemo/clr) for a PoC that implements a borrow checker using the same AIR analysis approach that has appeared meanwhile!
+**Update:** check out [CLR](https://github.com/ityonemo/clr) for a PoC that implements a borrow checker also using an AIR analysis approach that has appeared meanwhile!
